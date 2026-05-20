@@ -107,4 +107,14 @@ class TradeTracker:
         
         self.active_trade = None
         
-        return {"pnl": round(pnl, 2), "result": result}
+        # Return the full trade details for the live UI
+        return {
+            "entry_time": entry_str,
+            "exit_time": exit_str,
+            "direction": t['direction'],
+            "entry": round(t['entry_price'], 2),
+            "exit": round(exit_price, 2),
+            "pnl": round(pnl, 2),
+            "result": result,
+            "reasoning": t['reasoning']
+        }

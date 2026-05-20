@@ -104,11 +104,24 @@ def backtest_simulation_loop():
                 
                 if decision == "EXECUTE":
                     entry_price = candle['close']
-                    sl_distance, tp_distance = 3.00, 6.00
                     
-                    sl = entry_price - sl_distance if direction == "LONG" else entry_price + sl_distance
-                    tp = entry_price + tp_distance if direction == "LONG" else entry_price - tp_distance
+                    # --- NEW: Dynamic SL based on AI's Topological Selection ---
+                    sl_type = decision_json.get("Selected_SL_Type", "Medium_SL")
                     
+                    if sl_type == "Wide_SL":
+                        sl_distance, tp_distance = 5.00, 10.00
+                    elif sl_type == "Tight_SL":
+                        sl_distance, tp_distance = 1.50, 3.00
+                    else: # Medium_SL
+                        sl_distance, tp_distance = 3.00, 6.00
+                    
+                    if direction == "LONG":
+                        sl = entry_price - sl_distance
+                        tp = entry_price + tp_distance
+                    else:
+                        sl = entry_price + sl_distance
+                        tp = entry_price - tp_distance
+                        
                     # LOG TO LEDGER
                     tracker.open_trade(
                         timestamp=int(idx.timestamp()), direction=direction, 
@@ -121,8 +134,10 @@ def backtest_simulation_loop():
                         "asset": "XAUUSD", "direction": direction,
                         "entry": round(entry_price, 2), "sl": round(sl, 2), "tp": round(tp, 2),
                         "risk": decision_json.get("Recommended_Risk_Pct", 1.0),
-                        "reasoning": reasoning
+                        "reasoning": f"[{sl_type}] {reasoning}"
                     }
+                    
+                    print(f"{Color.MAGENTA}🔔 PUSHING LIVE SIGNAL TO UI: {direction} @ {entry_price} (Using {sl_type}){Color.RESET}")
                     socketio.emit('trade_signal', signal_payload)
 
 def get_rag_context_string(collection, current_tape):

@@ -26,21 +26,23 @@ def evaluate_trade_setup(market_state, rag_context, graph_context):
     print(f"{Color.CYAN}⚖️ Submitting Setup to AI Judge ({model})...{Color.RESET}")
 
     system_prompt = """You are an elite quantitative AI judge for XAUUSD (Gold). 
-Your job is to analyze the current market state, the historical vector precedents (RAG), and the topological parameter graph to rate a potential trade setup.
+    Your job is to analyze the current market state, the historical vector precedents (RAG), and the topological parameter graph to rate a potential trade setup.
 
-CRITICAL RULES:
-1. If the RAG history shows similar setups resulting in strong reversals against the trend, you MUST lower the Confidence Score.
-2. If the Graph context flags a parameter as a "DANGER NODE", you MUST veto the trade (Decision: PASS).
-3. You MUST output your final answer as a raw JSON object. Do not wrap it in markdown code blocks (e.g., no ```json). Do not include any conversational text.
+    CRITICAL RULES:
+    1. The Graph provides multiple Stop Loss options. You must IGNORE 'DANGER NODES' and actively SELECT a 'SAFEPATH' or 'NEUTRAL PATH' if one exists.
+    2. Only output a Decision of "PASS" if ALL graph paths are Danger Nodes, OR if the RAG history overwhelmingly shows strong reversals against your intended direction.
+    3. If RAG shows 'CHOP / CONSOLIDATION', do not panic. It means the market is slow. You may still EXECUTE but with a lower Confidence and Recommended_Risk_Pct.
+    4. You MUST output your final answer as a raw JSON object. Do not wrap it in markdown.
 
-REQUIRED JSON SCHEMA:
-{
-    "Decision": "EXECUTE" or "PASS",
-    "Direction": "LONG" or "SHORT",
-    "Confidence_Score": <integer between 0 and 100>,
-    "Recommended_Risk_Pct": <float between 0.1 and 2.0>,
-    "Primary_Reasoning": "<A one sentence explanation of your decision>"
-}"""
+    REQUIRED JSON SCHEMA:
+    {
+        "Decision": "EXECUTE" or "PASS",
+        "Direction": "LONG" or "SHORT",
+        "Confidence_Score": <integer between 0 and 100>,
+        "Recommended_Risk_Pct": <float between 0.1 and 2.0>,
+        "Selected_SL_Type": "Wide_SL" or "Medium_SL" or "Tight_SL",
+        "Primary_Reasoning": "<A one sentence explanation>"
+    }"""
 
     user_prompt = f"""
 =========================================

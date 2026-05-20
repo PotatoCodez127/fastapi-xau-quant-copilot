@@ -12,10 +12,19 @@
         #debug-bar { width: 100%; height: 30px; background: #000; color: #0f0; font-family: monospace; padding: 5px 10px; box-sizing: border-box; font-size: 12px; border-bottom: 1px solid #333; z-index: 9999; display: flex; align-items: center; }
         
         /* Hardcoded Layout to bypass flexbox issues */
-        #main-wrapper { display: flex; width: 100vw; height: calc(100vh - 30px); }
+        /* Updated Layout */
+        #main-wrapper { display: flex; flex-direction: column; width: 100vw; height: calc(100vh - 30px); }
+        #top-half { display: flex; height: 70%; width: 100%; border-bottom: 2px solid #2a2e39; }
         #chart-container { width: 75%; height: 100%; position: relative; border-right: 1px solid #2a2e39; }
         #telemetry-panel { width: 25%; height: 100%; padding: 20px; overflow-y: auto; background-color: #181c27; box-sizing: border-box; }
         
+        /* New Ledger Table Styles */
+        #ledger-panel { height: 30%; width: 100%; background: #131722; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; color: #d1d4dc; }
+        th { background: #1e222d; padding: 10px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #2a2e39; }
+        td { padding: 8px 10px; border-bottom: 1px solid #2a2e39; }
+        .win-text { color: #26a69a; font-weight: bold; }
+        .loss-text { color: #ef5350; font-weight: bold; }
         .log-entry { background: #2a2e39; padding: 15px; margin-bottom: 15px; border-radius: 6px; font-size: 14px; }
         .execute { border-left: 4px solid #26a69a; }
         .pass { border-left: 4px solid #ef5350; }
@@ -51,10 +60,31 @@
     <div id="debug-bar">Initializing System...</div>
     
     <div id="main-wrapper">
-        <div id="chart-container"></div>
-        <div id="telemetry-panel">
-            <h2>🧠 AI Judge Telemetry</h2>
-            <div id="logs"></div>
+        <div id="top-half">
+            <div id="chart-container"></div>
+            <div id="telemetry-panel">
+                <h2>🧠 AI Judge Telemetry</h2>
+                <div id="logs"></div>
+            </div>
+        </div>
+        
+        <div id="ledger-panel">
+            <table id="ledger-table">
+                <thead>
+                    <tr>
+                        <th>Entry Time</th>
+                        <th>Exit Time</th>
+                        <th>Direction</th>
+                        <th>Entry Price</th>
+                        <th>Exit Price</th>
+                        <th>PnL (Pts)</th>
+                        <th>Result</th>
+                        <th>AI Reasoning (Audit)</th>
+                    </tr>
+                </thead>
+                <tbody id="ledger-body">
+                    </tbody>
+            </table>
         </div>
     </div>
 
@@ -149,8 +179,38 @@
                     debugLog(`MARKER CRASH: ${err.message}`, "#f00");
                 }
             });
-        });
-        // Listen for Live Trade Signals
+            // Listen for Closed Trades and update the Ledger Table
+            // Listen for Closed Trades and update the Ledger Table
+            socket.on('trade_closed', (data) => {
+                try {
+                    debugLog(`Trade Closed: ${data.result} (${data.pnl} pts)`);
+                    
+                    const tbody = document.getElementById('ledger-body');
+                    const row = document.createElement('tr');
+                    
+                    const resultClass = data.result === 'WIN' ? 'win-text' : 'loss-text';
+                    const pnlPrefix = data.pnl > 0 ? '+' : '';
+                    
+                    row.innerHTML = `
+                        <td>${data.entry_time}</td>
+                        <td>${data.exit_time}</td>
+                        <td class="${data.direction === 'LONG' ? 'win-text' : 'loss-text'}">${data.direction}</td>
+                        <td>${data.entry.toFixed(2)}</td>
+                        <td>${data.exit.toFixed(2)}</td>
+                        <td class="${resultClass}">${pnlPrefix}${data.pnl.toFixed(2)}</td>
+                        <td class="${resultClass}">${data.result}</td>
+                        <td style="color: #8a93a6; font-style: italic;">${data.reasoning}</td>
+                    `;
+                    
+                    // Add new trades to the top of the list
+                    tbody.prepend(row);
+                    
+                } catch (err) {
+                    debugLog(`LEDGER CRASH: ${err.message}`, "#f00");
+                }
+            });
+
+            // Listen for Live Trade Signals (MOVED INSIDE THE LISTENER)
             socket.on('trade_signal', (data) => {
                 try {
                     debugLog(`🚨 ACTIVE SIGNAL RECEIVED: ${data.direction}`, "#ff0");
@@ -174,6 +234,7 @@
                     debugLog(`SIGNAL UI CRASH: ${err.message}`, "#f00");
                 }
             });
+        });
     </script>
 </body>
 </html>
