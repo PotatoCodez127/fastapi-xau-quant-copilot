@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>XAUUSD AI Copilot</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        body { margin: 0; padding: 0; background-color: #131722; color: #d1d4dc; font-family: -apple-system, sans-serif; overflow: hidden; }
+        
+        /* On-Screen Debugger */
+        #debug-bar { width: 100%; height: 30px; background: #000; color: #0f0; font-family: monospace; padding: 5px 10px; box-sizing: border-box; font-size: 12px; border-bottom: 1px solid #333; z-index: 9999; display: flex; align-items: center; }
+        
+        /* Hardcoded Layout to bypass flexbox issues */
+        #main-wrapper { display: flex; width: 100vw; height: calc(100vh - 30px); }
+        #chart-container { width: 75%; height: 100%; position: relative; border-right: 1px solid #2a2e39; }
+        #telemetry-panel { width: 25%; height: 100%; padding: 20px; overflow-y: auto; background-color: #181c27; box-sizing: border-box; }
+        
+        .log-entry { background: #2a2e39; padding: 15px; margin-bottom: 15px; border-radius: 6px; font-size: 14px; }
+        .execute { border-left: 4px solid #26a69a; }
+        .pass { border-left: 4px solid #ef5350; }
+        h2 { margin-top: 0; font-size: 18px; color: #fff; border-bottom: 1px solid #2a2e39; padding-bottom: 10px; }
+        .stat { color: #8a93a6; font-size: 12px; margin-top: 5px; }
+        /* Signal Modal Styles */
+        #signal-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; background: #1e222d; border: 2px solid #2a2e39; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 10000; overflow: hidden; font-family: -apple-system, sans-serif; }
+        .signal-header { padding: 15px; font-weight: bold; font-size: 18px; text-align: center; color: #fff; }
+        .signal-header.long { background: #26a69a; }
+        .signal-header.short { background: #ef5350; }
+        .signal-body { padding: 20px; color: #d1d4dc; }
+        .signal-row { display: flex; justify-content: space-between; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #2a2e39; font-size: 16px; }
+        .signal-value { font-weight: bold; color: #fff; }
+        .signal-reasoning { margin-top: 15px; font-size: 13px; color: #8a93a6; font-style: italic; line-height: 1.4; }
+        .dismiss-btn { width: 100%; padding: 12px; background: #2a2e39; color: #fff; border: none; font-size: 14px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        .dismiss-btn:hover { background: #363a45; }
+    </style>
+</head>
+<body>
+    <div id="signal-modal">
+        <div id="signal-header" class="signal-header">ACTION REQUIRED</div>
+        <div class="signal-body">
+            <div class="signal-row"><span>Asset:</span> <span class="signal-value" id="sig-asset">--</span></div>
+            <div class="signal-row"><span>Entry Price:</span> <span class="signal-value" id="sig-entry">--</span></div>
+            <div class="signal-row"><span>Stop Loss:</span> <span class="signal-value" id="sig-sl" style="color: #ef5350;">--</span></div>
+            <div class="signal-row"><span>Take Profit:</span> <span class="signal-value" id="sig-tp" style="color: #26a69a;">--</span></div>
+            <div class="signal-row" style="border: none;"><span>Risk Allocation:</span> <span class="signal-value" id="sig-risk">--</span></div>
+            <div class="signal-reasoning" id="sig-reasoning">--</div>
+        </div>
+        <button class="dismiss-btn" onclick="document.getElementById('signal-modal').style.display='none'">DISMISS ALERT</button>
+    </div>
+
+    <div id="debug-bar">Initializing System...</div>
+    
+    <div id="main-wrapper">
+        <div id="chart-container"></div>
+        <div id="telemetry-panel">
+            <h2>🧠 AI Judge Telemetry</h2>
+            <div id="logs"></div>
+        </div>
+    </div>
+
+    <script>
+        const debugLog = (msg, color = "#0f0") => {
+            const bar = document.getElementById('debug-bar');
+            bar.innerText = `[System Log]: ${msg}`;
+            bar.style.color = color;
+            console.log(msg);
+        };
+
+        let chart, candleSeries;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            try {
+                debugLog("DOM Loaded. Creating Chart...");
+                const chartContainer = document.getElementById('chart-container');
+                
+                chart = LightweightCharts.createChart(chartContainer, {
+                    autoSize: true, 
+                    layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d4dc' },
+                    grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+                    timeScale: { timeVisible: true, secondsVisible: false }
+                });
+
+                candleSeries = chart.addCandlestickSeries({
+                    upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
+                });
+                
+                debugLog("Chart Created Successfully. Connecting Sockets...");
+            } catch (err) {
+                debugLog(`CHART CRASH: ${err.message}`, "#f00");
+                return;
+            }
+
+            // WebSockets
+            const socket = io();
+
+            socket.on('connect', () => {
+                debugLog("Connected to Backend. Waiting for data...");
+            });
+
+            socket.on('disconnect', () => {
+                debugLog("Disconnected from Backend!", "#f00");
+            });
+
+            socket.on('init_history', (data) => {
+                try {
+                    debugLog(`Received ${data.length} historical candles.`);
+                    candleSeries.setData(data);
+                    chart.timeScale().fitContent();
+                } catch (err) {
+                    debugLog(`DATA CRASH (History): ${err.message}`, "#f00");
+                }
+            });
+
+            socket.on('new_candle', (data) => {
+                try {
+                    debugLog(`TICK: Received new candle at ${data.time}`);
+                    candleSeries.update(data);
+                } catch (err) {
+                    debugLog(`DATA CRASH (Tick): ${err.message}`, "#f00");
+                }
+            });
+
+            socket.on('ai_decision', (data) => {
+                try {
+                    debugLog(`AI Event Triggered: ${data.decision}`, "#ff0");
+                    
+                    const markers = candleSeries.markers() || [];
+                    markers.push({
+                        time: data.timestamp,
+                        position: data.decision === 'EXECUTE' ? 'belowBar' : 'aboveBar',
+                        color: data.decision === 'EXECUTE' ? '#26a69a' : '#ef5350',
+                        shape: data.decision === 'EXECUTE' ? 'arrowUp' : 'arrowDown',
+                        text: data.decision
+                    });
+                    
+                    markers.sort((a, b) => a.time - b.time);
+                    candleSeries.setMarkers(markers);
+
+                    const logsDiv = document.getElementById('logs');
+                    const logEntry = document.createElement('div');
+                    logEntry.className = `log-entry ${data.decision.toLowerCase()}`;
+                    logEntry.innerHTML = `
+                        <div style="font-weight: bold; color: ${data.decision === 'EXECUTE' ? '#26a69a' : '#ef5350'}">${data.decision}</div>
+                        <div style="margin: 8px 0;">${data.reasoning}</div>
+                        <div class="stat">Confidence: ${data.confidence}% | Distance: ${data.rag_distance}</div>
+                    `;
+                    logsDiv.prepend(logEntry);
+                } catch (err) {
+                    debugLog(`MARKER CRASH: ${err.message}`, "#f00");
+                }
+            });
+        });
+        // Listen for Live Trade Signals
+            socket.on('trade_signal', (data) => {
+                try {
+                    debugLog(`🚨 ACTIVE SIGNAL RECEIVED: ${data.direction}`, "#ff0");
+                    
+                    // Populate Modal Data
+                    const header = document.getElementById('signal-header');
+                    header.innerText = `${data.direction} ${data.asset}`;
+                    header.className = `signal-header ${data.direction.toLowerCase()}`;
+                    
+                    document.getElementById('sig-asset').innerText = data.asset;
+                    document.getElementById('sig-entry').innerText = data.entry.toFixed(2);
+                    document.getElementById('sig-sl').innerText = data.sl.toFixed(2);
+                    document.getElementById('sig-tp').innerText = data.tp.toFixed(2);
+                    document.getElementById('sig-risk').innerText = `${data.risk}% Portfolio`;
+                    document.getElementById('sig-reasoning').innerText = `Logic: ${data.reasoning}`;
+                    
+                    // Show Modal
+                    document.getElementById('signal-modal').style.display = 'block';
+                    
+                } catch (err) {
+                    debugLog(`SIGNAL UI CRASH: ${err.message}`, "#f00");
+                }
+            });
+    </script>
+</body>
+</html>

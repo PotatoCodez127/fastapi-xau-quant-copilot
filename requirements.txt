@@ -1,0 +1,25 @@
+# Core Data & API
+pandas
+numpy>=1.24.0
+requests
+python-dotenv
+
+# Agentic Memory (RAG & Graph)
+chromadb
+networkx
+llama-index
+
+# AI Evaluator
+ollama
+litellm
+
+# Database
+supabase
+
+# Visual Interface & WebSockets
+Flask
+Flask-SocketIO
+eventlet
+
+# Testing
+pytest
