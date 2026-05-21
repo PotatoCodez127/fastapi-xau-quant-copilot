@@ -11,14 +11,13 @@
         /* On-Screen Debugger */
         #debug-bar { width: 100%; height: 30px; background: #000; color: #0f0; font-family: monospace; padding: 5px 10px; box-sizing: border-box; font-size: 12px; border-bottom: 1px solid #333; z-index: 9999; display: flex; align-items: center; }
         
-        /* Hardcoded Layout to bypass flexbox issues */
         /* Updated Layout */
         #main-wrapper { display: flex; flex-direction: column; width: 100vw; height: calc(100vh - 30px); }
         #top-half { display: flex; height: 70%; width: 100%; border-bottom: 2px solid #2a2e39; }
         #chart-container { width: 75%; height: 100%; position: relative; border-right: 1px solid #2a2e39; }
         #telemetry-panel { width: 25%; height: 100%; padding: 20px; overflow-y: auto; background-color: #181c27; box-sizing: border-box; }
         
-        /* New Ledger Table Styles */
+        /* Ledger Table Styles */
         #ledger-panel { height: 30%; width: 100%; background: #131722; overflow-y: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; color: #d1d4dc; }
         th { background: #1e222d; padding: 10px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #2a2e39; }
@@ -30,6 +29,7 @@
         .pass { border-left: 4px solid #ef5350; }
         h2 { margin-top: 0; font-size: 18px; color: #fff; border-bottom: 1px solid #2a2e39; padding-bottom: 10px; }
         .stat { color: #8a93a6; font-size: 12px; margin-top: 5px; }
+        
         /* Signal Modal Styles */
         #signal-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; background: #1e222d; border: 2px solid #2a2e39; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 10000; overflow: hidden; font-family: -apple-system, sans-serif; }
         .signal-header { padding: 15px; font-weight: bold; font-size: 18px; text-align: center; color: #fff; }
@@ -55,6 +55,31 @@
             <div class="signal-reasoning" id="sig-reasoning">--</div>
         </div>
         <button class="dismiss-btn" onclick="document.getElementById('signal-modal').style.display='none'">DISMISS ALERT</button>
+    </div>
+
+    <div id="tearsheet-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 20000; justify-content: center; align-items: center; font-family: -apple-system, sans-serif;">
+        <div style="background: #1e222d; border: 2px solid #2a2e39; border-radius: 8px; width: 500px; padding: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.9); text-align: center;">
+            <h1 style="color: #fff; margin-top: 0; border-bottom: 2px solid #2a2e39; padding-bottom: 15px;">📊 BACKTEST COMPLETE</h1>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 20px; text-align: left;">
+                <div>
+                    <div style="color: #8a93a6; font-size: 14px;">Net Profitability</div>
+                    <div id="ts-net-pips" style="font-size: 32px; font-weight: bold; margin-top: 5px;">-- Pips</div>
+                </div>
+                <div>
+                    <div style="color: #8a93a6; font-size: 14px;">Win Rate</div>
+                    <div id="ts-win-rate" style="font-size: 32px; font-weight: bold; margin-top: 5px; color: #d1d4dc;">--%</div>
+                </div>
+            </div>
+            
+            <div style="background: #131722; border-radius: 6px; padding: 15px; margin-top: 25px; display: flex; justify-content: space-around; color: #d1d4dc;">
+                <div><strong>Total Trades:</strong> <span id="ts-total">--</span></div>
+                <div style="color: #26a69a;"><strong>Winners:</strong> <span id="ts-wins">--</span></div>
+                <div style="color: #ef5350;"><strong>Losers:</strong> <span id="ts-losses">--</span></div>
+            </div>
+            
+            <button onclick="document.getElementById('tearsheet-modal').style.display='none'" style="margin-top: 25px; width: 100%; padding: 15px; background: #2962ff; color: #fff; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer;">REVIEW CHARTS</button>
+        </div>
     </div>
 
     <div id="debug-bar">Initializing System...</div>
@@ -83,7 +108,7 @@
                     </tr>
                 </thead>
                 <tbody id="ledger-body">
-                    </tbody>
+                </tbody>
             </table>
         </div>
     </div>
@@ -179,7 +204,7 @@
                     debugLog(`MARKER CRASH: ${err.message}`, "#f00");
                 }
             });
-            // Listen for Closed Trades and update the Ledger Table
+
             // Listen for Closed Trades and update the Ledger Table
             socket.on('trade_closed', (data) => {
                 try {
@@ -210,7 +235,7 @@
                 }
             });
 
-            // Listen for Live Trade Signals (MOVED INSIDE THE LISTENER)
+            // Listen for Live Trade Signals
             socket.on('trade_signal', (data) => {
                 try {
                     debugLog(`🚨 ACTIVE SIGNAL RECEIVED: ${data.direction}`, "#ff0");
@@ -232,6 +257,28 @@
                     
                 } catch (err) {
                     debugLog(`SIGNAL UI CRASH: ${err.message}`, "#f00");
+                }
+            });
+
+            // Listen for End of Run
+            socket.on('backtest_complete', (data) => {
+                try {
+                    debugLog(`🏁 BACKTEST COMPLETE. Net Pips: ${data.net_pips}`, "#0f0");
+                    
+                    const pipsEl = document.getElementById('ts-net-pips');
+                    pipsEl.innerText = `${data.net_pips > 0 ? '+' : ''}${data.net_pips.toFixed(1)} Pips`;
+                    pipsEl.style.color = data.net_pips > 0 ? '#26a69a' : (data.net_pips < 0 ? '#ef5350' : '#d1d4dc');
+                    
+                    document.getElementById('ts-win-rate').innerText = `${data.win_rate.toFixed(1)}%`;
+                    document.getElementById('ts-total').innerText = data.total_trades;
+                    document.getElementById('ts-wins').innerText = data.winners;
+                    document.getElementById('ts-losses').innerText = data.losers;
+                    
+                    // Dim the screen and show the final scorecard
+                    document.getElementById('tearsheet-modal').style.display = 'flex';
+                    
+                } catch (err) {
+                    debugLog(`TEARSHEET CRASH: ${err.message}`, "#f00");
                 }
             });
         });
