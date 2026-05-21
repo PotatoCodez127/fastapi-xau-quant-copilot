@@ -112,9 +112,14 @@ def backtest_simulation_loop():
             current_session = row.get('session', 'Unknown')
             current_strat = "Trend_Following" if row.get('gold_1h_trend', 0) > 0 else "Breakout"
             
+            # --- NEW: Extract Day of Week and pass it to the AI ---
+            day_of_week = idx.strftime('%A')
+            
             rag_context = get_rag_context_string(rag_collection, current_tape)
             graph_context = get_graph_context_string(knowledge_graph, current_session, current_strat)
-            market_state = f"Time: {idx.strftime('%H:%M UTC')}\nSession: {current_session}\nStrategy: {current_strat}\nTape: {current_tape}"
+            
+            # Update the market state string to include the day
+            market_state = f"Time: {idx.strftime('%H:%M UTC')} ({day_of_week})\nSession: {current_session}\nStrategy: {current_strat}\nTape: {current_tape}"
             
             decision_json = evaluate_trade_setup(market_state, rag_context, graph_context)
             
