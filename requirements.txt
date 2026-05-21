@@ -12,6 +12,7 @@ llama-index
 # AI Evaluator
 ollama
 litellm
+yfinance
 
 # Database
 supabase

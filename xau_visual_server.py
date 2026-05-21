@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_socketio import SocketIO
 import random
 import os
@@ -8,6 +8,7 @@ from xau_massive_engine import build_macro_matrix, engineer_xau_features
 from xau_rag_memory import setup_chroma_db, generate_semantic_tape, populate_memory
 from xau_graph_evaluator import generate_mock_trade_history, build_knowledge_graph
 from xau_ai_judge import evaluate_trade_setup
+from xau_massive_engine import build_macro_matrix, engineer_xau_features, fetch_live_candle
 
 # Import the Ledger Accountant
 from xau_trade_tracker import TradeTracker
@@ -17,6 +18,15 @@ class Color:
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)
+
+market_history_cache = []
+
+@socketio.on('connect')
+def handle_connect():
+    """Instantly pushes the historical cache to the newly connected browser."""
+    global market_history_cache
+    if market_history_cache:
+        socketio.emit('init_history', market_history_cache, to=request.sid)
 
 def get_rag_context_string(collection, current_tape):
     """Queries ChromaDB and formats the result as a string for the LLM."""
@@ -138,19 +148,15 @@ def backtest_simulation_loop():
                 socketio.emit('ai_decision', ai_payload)
                 
                 if decision == "EXECUTE":
-                    entry_price = candle['close']
+                    entry_price = candle_data['close']
+                    sl_type = decision_json.get("Selected_SL_Type", "Medium_SL")
                     
-                    # -------------------------------------------------------------
                     # 🎯 BROKER CALIBRATED PIP DISTANCES (1 Pip = $0.10)
-                    # -------------------------------------------------------------
                     if sl_type == "Wide_SL":
-                        # 60 Pips Risk / 120 Pips Reward
                         sl_distance, tp_distance = 6.00, 12.00 
                     elif sl_type == "Tight_SL":
-                        # 20 Pips Risk / 40 Pips Reward
                         sl_distance, tp_distance = 2.00, 4.00   
                     else: 
-                        # Medium_SL: 40 Pips Risk / 80 Pips Reward
                         sl_distance, tp_distance = 4.00, 8.00   
                     
                     if direction == "LONG":
@@ -160,11 +166,11 @@ def backtest_simulation_loop():
                         sl = entry_price + sl_distance
                         tp = entry_price - tp_distance
                         
-                    # OPEN THE TRADE IN THE ACCOUNTING LEDGER
+                    # OPEN THE LIVE PAPER TRADE IN THE ACCOUNTING LEDGER
                     tracker.open_trade(
-                        timestamp=int(idx.timestamp()), direction=direction, 
+                        timestamp=int(current_time.timestamp()), direction=direction, 
                         entry_price=entry_price, sl=sl, tp=tp, 
-                        confidence=confidence, reasoning=reasoning, 
+                        confidence=decision_json.get("Confidence_Score", 0), reasoning=reasoning, 
                         rag_ctx=rag_context, graph_ctx=graph_context
                     )
                     
@@ -205,15 +211,17 @@ def live_execution_loop():
     
     socketio.sleep(3.0) 
     
-    # Push history to the UI
-    history = []
+    # --- FIX: Save history to the global cache ---
+    global market_history_cache
+    market_history_cache = []
     for idx, row in df.iterrows():
-        history.append({
+        market_history_cache.append({
             'time': int(idx.timestamp()),
             'open': float(row['open']), 'high': float(row['high']),
             'low': float(row['low']), 'close': float(row['close'])
         })
-    socketio.emit('init_history', history)
+        
+    socketio.emit('init_history', market_history_cache)
     
     print(f"{Color.GREEN}✅ System Fully Armed. Connecting to Live API Feed...{Color.RESET}")
     
@@ -222,17 +230,20 @@ def live_execution_loop():
     
     while True:
         # 1. Ask the Massive Engine for the current live state
-        # (You will need to import fetch_live_candle from xau_massive_engine)
         latest_candle = fetch_live_candle() 
         
         if latest_candle is None:
-            socketio.sleep(10) # API failed, wait and retry
+            print(f"{Color.RED}⚠️ Yahoo API returned no data. Retrying in 10s...{Color.RESET}")
+            socketio.sleep(10) 
             continue
             
         current_time = latest_candle.name
         
+        print(f"📡 [HEARTBEAT] Live Time: {current_time} | Waiting for > {last_processed_time}")
+        
         # 2. Check if a NEW candle has closed
         if current_time > last_processed_time:
+            print(f"{Color.GREEN}✨ NEW CANDLE CLOSED! Pushing to UI...{Color.RESET}")
             last_processed_time = current_time
             
             candle_data = {
@@ -240,6 +251,7 @@ def live_execution_loop():
                 'open': float(latest_candle['open']), 'high': float(latest_candle['high']),
                 'low': float(latest_candle['low']), 'close': float(latest_candle['close'])
             }
+            market_history_cache.append(candle_data)
             
             # Push the live tick to the frontend chart
             socketio.emit('new_candle', candle_data)
@@ -279,8 +291,39 @@ def live_execution_loop():
                     socketio.emit('ai_decision', ai_payload)
                     
                     if decision == "EXECUTE":
-                        # Execute logic goes here (same as backtester)
-                        pass 
+                        entry_price = candle_data['close']
+                        sl_type = decision_json.get("Selected_SL_Type", "Medium_SL")
+                        
+                        # 🎯 BROKER CALIBRATED PIP DISTANCES (1 Pip = $0.10)
+                        if sl_type == "Wide_SL":
+                            sl_distance, tp_distance = 6.00, 12.00 
+                        elif sl_type == "Tight_SL":
+                            sl_distance, tp_distance = 2.00, 4.00   
+                        else: 
+                            sl_distance, tp_distance = 4.00, 8.00   
+                        
+                        if direction == "LONG":
+                            sl = entry_price - sl_distance
+                            tp = entry_price + tp_distance
+                        else:
+                            sl = entry_price + sl_distance
+                            tp = entry_price - tp_distance
+                            
+                        # OPEN THE LIVE PAPER TRADE IN THE ACCOUNTING LEDGER
+                        tracker.open_trade(
+                            timestamp=int(current_time.timestamp()), direction=direction, 
+                            entry_price=entry_price, sl=sl, tp=tp, 
+                            confidence=decision_json.get("Confidence_Score", 0), reasoning=reasoning, 
+                            rag_ctx=rag_context, graph_ctx=graph_context
+                        )
+                        
+                        signal_payload = {
+                            "asset": "XAUUSD", "direction": direction,
+                            "entry": round(entry_price, 2), "sl": round(sl, 2), "tp": round(tp, 2),
+                            "risk": decision_json.get("Recommended_Risk_Pct", 1.0),
+                            "reasoning": f"[{sl_type}] {reasoning}"
+                        }
+                        socketio.emit('trade_signal', signal_payload)
                         
         # Wait 10 seconds before polling the API again to avoid rate-limits
         socketio.sleep(10)

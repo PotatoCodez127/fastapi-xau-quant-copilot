@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from xau_visual_server import app, socketio, backtest_simulation_loop
+from xau_visual_server import app, socketio, live_execution_loop 
 
 class Color:
     GREEN, CYAN, YELLOW, RED, MAGENTA, RESET = '\033[92m', '\033[96m', '\033[93m', '\033[91m', '\033[95m', '\033[0m'
@@ -22,17 +22,16 @@ def check_environment():
     load_dotenv()
     
     # 1. Check API Keys
-    if not os.getenv("MASSIVE_API_KEY"):
-        print(f"{Color.RED}❌ FATAL ERROR: MASSIVE_API_KEY missing from .env file.{Color.RESET}")
-        print(f"{Color.YELLOW}Please add it before running the engine.{Color.RESET}")
-        return False
+    # NOTE: The MASSIVE_API_KEY check was removed because the Omni-Agent 
+    # now runs entirely on 100% free, 10-minute delayed Yahoo Finance data.
         
     if not os.getenv("OLLAMA_API_KEYS"):
         print(f"{Color.YELLOW}⚠️ WARNING: OLLAMA_API_KEYS missing. The AI Judge will fail to connect.{Color.RESET}")
         
-    # 2. Ensure data directories exist for ChromaDB and the Omni-Ledger
+    # 2. Ensure data directories exist for ChromaDB, Ledgers, and Logs
     os.makedirs("data", exist_ok=True)
     os.makedirs("data/xau_rag_db", exist_ok=True)
+    os.makedirs("results", exist_ok=True) # Added to support the new live_trade_log.csv
     
     print(f"{Color.GREEN}✅ Environment checks passed.{Color.RESET}\n")
     return True
@@ -43,8 +42,8 @@ if __name__ == '__main__':
     if check_environment():
         print(f"{Color.CYAN}🚀 Booting up the Omni-Agent Server & AI Modules...{Color.RESET}")
         
-        # Start the background backtesting, tracker, and AI loop
-        socketio.start_background_task(backtest_simulation_loop)
+        # --- Start the LIVE background loop ---
+        socketio.start_background_task(live_execution_loop)
         
         # Launch the Flask / WebSocket server
         print(f"{Color.GREEN}🌐 UI Server running at http://127.0.0.1:5000{Color.RESET}")

@@ -1,100 +1,64 @@
 import os
-import requests
 import pandas as pd
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
+from datetime import datetime
+import yfinance as yf
 import time
+import csv
 
 class Color:
     GREEN, CYAN, YELLOW, RED, RESET = '\033[92m', '\033[96m', '\033[93m', '\033[91m', '\033[0m'
 
-def fetch_chunk(symbol, start_str, end_str, api_key):
-    """Fetches a specific chunk of data from Massive with a retry mechanism."""
-    endpoint_url = f"https://api.massive.com/v2/aggs/ticker/{symbol}/range/5/minute/{start_str}/{end_str}"
-    params = {"adjusted": "true", "sort": "asc", "limit": 50000}
-    headers = {"Authorization": f"Bearer {api_key}"}
-
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(endpoint_url, params=params, headers=headers, timeout=15)
+def fetch_yahoo_history(symbol, daysback=7, interval="5m"):
+    """Fetches historical data from Yahoo Finance to ensure seamless live continuity."""
+    print(f"📡 Fetching {daysback} days of {symbol} from Yahoo Finance...")
+    try:
+        df = yf.Ticker(symbol).history(period=f"{daysback}d", interval=interval)
+        if df.empty:
+            return pd.DataFrame()
             
-            if response.status_code != 200:
-                print(f"{Color.RED}❌ HTTP Error {response.status_code} for {symbol}: {response.text}{Color.RESET}")
-                return []
-                
-            data = response.json()
+        df = df.rename(columns={
+            'Open': 'open', 'High': 'high', 
+            'Low': 'low', 'Close': 'close', 'Volume': 'volume'
+        })
+        
+        # Standardize everything to UTC to match the AI Ledger
+        if df.index.tz is None:
+            df.index = df.index.tz_localize('UTC')
+        else:
+            df.index = df.index.tz_convert('UTC')
             
-            if data.get("resultsCount", 0) == 0:
-                print(f"{Color.YELLOW}⚠️ API returned 0 results for {symbol} between {start_str} and {end_str}.{Color.RESET}")
-                return []
-                
-            return data.get("results", [])
-            
-        except requests.exceptions.RequestException as e:
-            if attempt < max_retries - 1:
-                print(f"{Color.YELLOW}⚠️ Connection dropped for {symbol}. Retrying in 2 seconds... (Attempt {attempt + 1}/{max_retries}){Color.RESET}")
-                time.sleep(2)
-            else:
-                print(f"{Color.RED}❌ Network/Execution Error fetching {symbol} after {max_retries} attempts: {e}{Color.RESET}")
-                return []
-
-def fetch_massive_asset(symbol, daysback=30):
-    """Fetches data and maps it to a Pandas DataFrame."""
-    load_dotenv()
-    api_key = os.getenv("MASSIVE_API_KEY")
-    
-    if not api_key:
-        raise ValueError("MASSIVE_API_KEY is missing from the .env file.")
-
-    end_date = datetime.utcnow()
-    start_date = end_date - timedelta(days=daysback) 
-
-    end_str = end_date.strftime('%Y-%m-%d')
-    start_str = start_date.strftime('%Y-%m-%d')
-
-    print(f"📡 Fetching {symbol} from Massive API...")
-    raw_candles = fetch_chunk(symbol, start_str, end_str, api_key)
-
-    if not raw_candles:
+        return df[['open', 'high', 'low', 'close', 'volume']]
+    except Exception as e:
+        print(f"{Color.RED}Yahoo API Error for {symbol}: {e}{Color.RESET}")
         return pd.DataFrame()
 
-    df = pd.DataFrame(raw_candles)
-    df = df.rename(columns={'o': 'open', 'h': 'high', 'l': 'low', 'c': 'close', 'v': 'volume', 't': 'timestamp'})
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms').dt.tz_localize('UTC')
-    
-    df.drop_duplicates(subset=['timestamp'], inplace=True)
-    df.sort_values('timestamp', inplace=True)
-    df.set_index('timestamp', inplace=True)
-    
-    return df[['open', 'high', 'low', 'close', 'volume']]
-
 def build_macro_matrix(daysback=30):
-    print(f"{Color.CYAN}📥 Building Macro-Synchronized Matrix...{Color.RESET}")
+    print(f"{Color.CYAN}📥 Building Macro-Synchronized Matrix (Yahoo Finance)...{Color.RESET}")
     
-    gold_df = fetch_massive_asset("C:XAUUSD", daysback) 
-    dxy_df = fetch_massive_asset("UUP", daysback)     
+    # 1. Fetch Gold Futures (GC=F) - 10 Min Delayed
+    gold_df = fetch_yahoo_history("GC=F", daysback=daysback)
     
     if gold_df.empty:
         print(f"{Color.RED}❌ Critical Failure: Could not fetch Gold data. Halting.{Color.RESET}")
         return None
 
+    # 2. Fetch DXY Macro Data
+    dxy_df = fetch_yahoo_history("DX-Y.NYB", daysback=daysback)
+    
     master_df = gold_df.copy()
     
-    # Merge DXY onto the Gold timeline (Forward fill missing macro ticks)
     if not dxy_df.empty:
-        master_df['dxy_close'] = dxy_df['close'].reindex(master_df.index).ffill()
+        dxy_df = dxy_df.rename(columns={'close': 'dxy_close'})
+        # Merge DXY onto the Gold timeline
+        master_df = master_df.join(dxy_df['dxy_close'], how='left').ffill()
     else:
-        print(f"{Color.YELLOW}⚠️ DXY data missing. Filling with 0.0 (API might not support I:DXY){Color.RESET}")
-        master_df['dxy_close'] = 0.0
-
+        master_df['dxy_close'] = 104.0
+        
     master_df.dropna(inplace=True)
-    return master_df
+    return master_df[['open', 'high', 'low', 'close', 'volume', 'dxy_close']]
 
 def engineer_xau_features(df):
     """Tags Gold-specific liquidity sessions and macro momentum."""
-    print(f"{Color.YELLOW}⚙️ Engineering XAUUSD AI Context Features...{Color.RESET}")
-    
     # Session Logic (UTC)
     def assign_session(hour):
         if 0 <= hour < 6: return "Asian_Consolidation"
@@ -104,7 +68,6 @@ def engineer_xau_features(df):
         
     df['session'] = df.index.hour.map(assign_session)
     
-    # Rolling Context for the RAG Vector DB (1 hour lookback on 5m chart)
     lookback = 12 
     df['gold_1h_trend'] = df['close'] - df['close'].shift(lookback)
     
@@ -117,57 +80,29 @@ def engineer_xau_features(df):
     return df.dropna()
 
 def fetch_live_candle():
-    """Pings the Massive API for the current live state of XAUUSD."""
+    """Pings Yahoo Finance for GC=F (10-min delayed) and merges DXY."""
     try:
-        # Massive.com requires a 'C:' prefix for forex tickers (C:XAUUSD)
-        # We fetch the last 1 hour of data to ensure we grab the latest 5-min closed bar.
-        end_time = int(time.time() * 1000)
-        start_time = end_time - (60 * 60 * 1000) 
+        gold = yf.Ticker("GC=F").history(period="5d", interval="5m")
+        dxy = yf.Ticker("DX-Y.NYB").history(period="5d", interval="5m")
         
-        api_key = "YOUR_MASSIVE_API_KEY" # Replace with your real Massive API Key
-        
-        # The correct Custom Bars OHLC endpoint
-        url = f"https://api.massive.com/v2/aggs/ticker/C:XAUUSD/range/5/minute/{start_time}/{end_time}?adjusted=true&sort=desc&limit=1&apiKey={api_key}"
-        
-        response = requests.get(url)
-        data = response.json()
-        
-        if 'results' in data and len(data['results']) > 0:
-            latest = data['results'][0] # Grab the single latest 5-min candle
+        if not gold.empty:
+            gold = gold.rename(columns={
+                'Open': 'open', 'High': 'high', 
+                'Low': 'low', 'Close': 'close', 'Volume': 'volume'
+            })
+            dxy = dxy.rename(columns={'Close': 'dxy_close'})
             
-            # Map the Massive API response keys to your system's nomenclature
-            live_candle = {
-                'open': latest['o'],
-                'high': latest['h'],
-                'low': latest['l'],
-                'close': latest['c'],
-                'volume': latest.get('v', 0),
-                'time': latest['t'] / 1000.0  # Convert milliseconds to standard Unix timestamp
-            }
+            matrix = gold.join(dxy['dxy_close'], how='left').ffill()
             
-            # Wrap in a DataFrame for the feature engineering pipeline
-            live_matrix = pd.DataFrame([live_candle])
-            live_matrix.set_index(pd.to_datetime(live_matrix['time'], unit='s'), inplace=True)
-            
-            # Run your standard feature engineering so the AI gets the 1H Trend and DXY metrics
-            # live_features = engineer_xau_features(live_matrix)
-            # return live_features.iloc[-1]
-            
-            return live_matrix.iloc[-1]
+            if matrix.index.tz is None:
+                matrix.index = matrix.index.tz_localize('UTC')
+            else:
+                matrix.index = matrix.index.tz_convert('UTC')
+                
+            live_features = engineer_xau_features(matrix)
+            return live_features.iloc[-1]
             
         return None
     except Exception as e:
-        print(f"API Error: {e}")
+        print(f"Live API Error: {e}")
         return None
-
-if __name__ == "__main__":
-    matrix = build_macro_matrix(daysback=30)
-    if matrix is not None:
-        final_df = engineer_xau_features(matrix)
-        
-        print(f"\n{Color.GREEN}✅ Massive Data Engine Initialized. Shape: {final_df.shape}{Color.RESET}\n")
-        
-        # Display the highly volatile Overlap session
-        ny_sample = final_df[final_df['session'] == 'NY_London_Overlap'].tail(5)
-        print("Sample Output (Ready for RAG Vectorization):")
-        print(ny_sample[['close', 'session', 'dxy_close', 'gold_1h_trend']].to_string())

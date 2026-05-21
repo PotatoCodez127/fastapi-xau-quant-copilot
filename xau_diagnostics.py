@@ -105,4 +105,5 @@ def run_deep_diagnostics(ledger_path="data/omni_ledger.csv"):
             print(f"  - {node}: {row['Trades']} Trades | {row['Net_Pips']} Pips")
 
 if __name__ == "__main__":
-    run_deep_diagnostics()
+    # Change this from the default backtest ledger to your live paper-trading ledger
+    run_deep_diagnostics(ledger_path="data/live_omni_ledger.csv")
