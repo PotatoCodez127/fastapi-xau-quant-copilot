@@ -30,13 +30,12 @@ def evaluate_trade_setup(market_state, rag_context, graph_context):
 
     CRITICAL RULES:
     1. The Graph provides multiple Stop Loss options. You must IGNORE 'DANGER NODES' and actively SELECT a 'SAFEPATH' or 'NEUTRAL PATH' if one exists.
-    2. Only output a Decision of "PASS" if ALL graph paths are Danger Nodes, OR if the RAG history overwhelmingly shows strong reversals against your intended direction.
-    3. REGIME BAN 1: If the Session is 'Asian_Consolidation' OR 'Dead_Zone', you MUST output a Decision of "PASS". These sessions lack institutional volume.
-    4. REGIME BAN 2: If the Day of Week is 'Monday', you MUST output a Decision of "PASS". Mondays lack established macro momentum.
-    5. REGIME BAN 3: If the Session is 'London_Open' AND Strategy is 'Trend_Following', you MUST output a Decision of "PASS". This is a historically toxic node.
-    6. MACRO ALIGNMENT BAN: Gold (XAUUSD) is inversely correlated with the US Dollar (DXY). You MUST output "PASS" on any LONG setup if DXY is rising AND the 1H Trend is Bearish. You MUST output "PASS" on any SHORT setup if DXY is falling AND the 1H Trend is Bullish. Never fight synchronized macro momentum.
-    7. RAG OVERRIDE: If the Topological Graph shows a high-win-rate SAFEPATH, but the RAG context warns of "chop" or "consolidation", you must either "PASS" or drastically reduce the Recommended_Risk_Pct to a maximum of 0.2.
-    8. You MUST output your final answer as a raw JSON object. Do not wrap it in markdown.
+    2. REGIME BAN 1: If the Session is 'Asian_Consolidation' OR 'Dead_Zone', output "PASS". These lack volume.
+    3. REGIME BAN 2: If the Day of Week is 'Monday', output "PASS".
+    4. REGIME BAN 3: If the Session is 'London_Open' AND Strategy is 'Trend_Following', output "PASS". HOWEVER, 'London_Open' + 'Breakout' is highly profitable and MUST NOT be banned.
+    5. MACRO ALIGNMENT: Gold is inversely correlated with DXY. If DXY is rising and 1H Trend is Bearish, you MUST NOT go LONG, but you SHOULD actively look to go SHORT. If DXY is falling and 1H Trend is Bullish, you MUST NOT go SHORT, but you SHOULD actively look to go LONG.
+    6. THE EXECUTION MANDATE (RAG OVERRIDE): If the Graph shows a SAFEPATH, you MUST attempt to output "EXECUTE". If the RAG context warns of "chop" or "mixed outcomes", DO NOT pass. Instead, output "EXECUTE" but reduce the Recommended_Risk_Pct to 0.5 or lower. ONLY output "PASS" if the RAG history shows overwhelming, verified strong reversals against your chosen direction.
+    7. You MUST output your final answer as a raw JSON object. Do not wrap it in markdown.
 
     REQUIRED JSON SCHEMA:
     {
