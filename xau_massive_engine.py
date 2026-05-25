@@ -104,9 +104,10 @@ def fetch_live_candle():
     """Pings TwelveData for zero-delay Spot Gold and merges DXY."""
     try:
         # We only need the last 5 candles to grab the most recent closed one
-        gold = fetch_twelvedata(symbol="XAU/USD", outputsize=5)
+        gold = fetch_twelvedata(symbol="XAU/USD", outputsize=30)
         
         # We pull 1 day of DXY to ensure we have a valid reference point, even on holidays
+        # We pull 1 day of DXY to ensure we have a valid reference point
         dxy = yf.Ticker("DX-Y.NYB").history(period="1d", interval="5m")
         
         if not gold.empty:
@@ -116,16 +117,22 @@ def fetch_live_candle():
                     dxy.index = dxy.index.tz_localize('UTC')
                 else:
                     dxy.index = dxy.index.tz_convert('UTC')
-                matrix = gold.join(dxy['dxy_close'], how='left').ffill()
+                matrix = gold.join(dxy['dxy_close'], how='left')
             else:
                 matrix = gold
                 matrix['dxy_close'] = 104.0
             
-            # Catch trailing NaNs
-            matrix['dxy_close'] = matrix['dxy_close'].ffill().bfill()
+            # =======================================================
+            # 🛡️ THE FIX: Forcefully replace all Holiday NaNs with 104.0 
+            # so .dropna() doesn't wipe out the Spot Gold data!
+            # =======================================================
+            matrix['dxy_close'] = matrix['dxy_close'].fillna(104.0)
             
             live_features = engineer_xau_features(matrix)
             
+            if live_features.empty:
+                return None
+                
             # Return the fully completed, closed candle
             return live_features.iloc[-2]
             
