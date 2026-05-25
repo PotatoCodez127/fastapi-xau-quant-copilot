@@ -233,8 +233,8 @@ def live_execution_loop():
         latest_candle = fetch_live_candle() 
         
         if latest_candle is None:
-            print(f"{Color.RED}⚠️ Yahoo API returned no data. Retrying in 10s...{Color.RESET}")
-            socketio.sleep(10) 
+            print(f"{Color.RED}⚠️ TwelveData API returned no data. Retrying in 60s...{Color.RESET}")
+            socketio.sleep(60) 
             continue
             
         current_time = latest_candle.name
@@ -326,7 +326,7 @@ def live_execution_loop():
                         socketio.emit('trade_signal', signal_payload)
                         
         # Wait 10 seconds before polling the API again to avoid rate-limits
-        socketio.sleep(10)
+        socketio.sleep(60)
 
 @app.route('/')
 def index(): return render_template('dashboard.html')
