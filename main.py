@@ -1,23 +1,19 @@
 # main.py
 import asyncio
 import logging
-import random
 from contextlib import asynccontextmanager
-from datetime import datetime
 import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 from config import settings
-from xau_massive_engine import build_macro_matrix_async, engineer_xau_features, fetch_live_candle_async
-from xau_rag_memory import setup_chroma_db, generate_semantic_tape, populate_memory
-from xau_graph_evaluator import generate_mock_trade_history, build_knowledge_graph
-from xau_ai_judge import evaluate_trade_setup_async
-from xau_trade_tracker import TradeTracker
-from xau_state_manager import state_manager, QuantitativeGuard
+from src.core.engine import build_macro_matrix_async, engineer_xau_features, fetch_live_candle_async
+from src.core.tracker import TradeTracker
+from src.api.state import state_manager, QuantitativeGuard
+from src.api.judge import evaluate_trade_setup_async
+from src.memory.rag import setup_chroma_db, generate_semantic_tape, populate_memory
+from src.memory.graph import build_knowledge_graph, generate_mock_trade_history
 
-# Setup structured engineering telemetry
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("quant.engine")
 
