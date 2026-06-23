@@ -13,7 +13,7 @@
         }
         body {
             background-color: var(--bg-primary); color: var(--text-main);
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px;
+            font-family: 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px;
         }
         .grid-layout {
             display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-top: 20px;
@@ -26,10 +26,10 @@
             border-bottom: 2px solid var(--accent-gold); padding-bottom: 10px;
         }
         #terminal-telemetry {
-            background-color: #05070f; font-family: 'Courier New', Courier, monospace;
+            background-color: #05070f; font-family: monospace;
             height: 300px; overflow-y: auto; padding: 15px; border-radius: 4px; border: 1px solid #1a2336;
         }
-        .log-entry { margin-bottom: 8px; font-size: 0.9rem; line-height: 1.4; }
+        .log-entry { margin-bottom: 8px; font-size: 0.9rem; }
         .badge-long { color: var(--signal-green); font-weight: bold; }
         .badge-short { color: var(--signal-red); font-weight: bold; }
     </style>
@@ -58,7 +58,6 @@
             <h3 style="margin-top: 30px;">Strategic Execution Parameters</h3>
             <div style="font-size: 0.95rem; line-height: 1.8;">
                 <div>Asset Target: <span style="color: var(--accent-gold);">XAUUSD Spot Gold</span></div>
-                <div>Evaluation Model: <span id="meta-model">Connecting...</span></div>
                 <div>Core Pipeline: <span style="color: var(--signal-green);">ASGI Loop Async</span></div>
             </div>
         </div>
@@ -68,14 +67,12 @@
         const telemetryTerminal = document.getElementById('terminal-telemetry');
         const statusIndicator = document.getElementById('connection-status');
         
-        // Initialize real-time chart canvas options
-        const chartOptions = {
+        const chart = new ApexCharts(document.querySelector("#chart-viewport"), {
             chart: { type: 'candlestick', height: 350, id: 'xau_live_stream' },
             series: [{ data: [] }],
             xaxis: { type: 'datetime' },
             theme: { mode: 'dark' }
-        };
-        const chart = new ApexCharts(document.querySelector("#chart-viewport"), chartOptions);
+        });
         chart.render();
 
         function appendLog(message, contextClass = '') {
@@ -93,7 +90,7 @@
         socket.onopen = () => {
             statusIndicator.innerText = "🟢 CORE TELEMETRY LINK ACTIVE";
             statusIndicator.style.color = "var(--signal-green)";
-            appendLog("System handshake established. Stream active.");
+            appendLog("System handshake established via native ASGI WebSockets.");
         };
 
         socket.onmessage = (event) => {
@@ -107,7 +104,7 @@
                         y: [c.open, c.high, c.low, c.close]
                     }));
                     ApexCharts.exec('xau_live_stream', 'updateSeries', [{ data: historicalCandles }]);
-                    appendLog(`Loaded ${historicalCandles.length} historical context candles.`);
+                    appendLog(`Loaded ${historicalCandles.length} records into the viewport cache.`);
                     break;
 
                 case 'new_candle':
@@ -146,7 +143,6 @@
         socket.onclose = () => {
             statusIndicator.innerText = "🔴 SYSTEM DISCONNECTED";
             statusIndicator.style.color = "var(--signal-red)";
-            appendLog("Connection dropped. Awaiting reconnect loop...", 'badge-short');
         };
     </script>
 </body>
