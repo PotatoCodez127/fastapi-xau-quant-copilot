@@ -8,7 +8,7 @@ from config import settings
 
 
 class Color:
-    GREEN, CYAN, YELLOW, RED, RESET = "\033[92m", "\033[96m", "\033[93m", "\033[0m"
+    GREEN, CYAN, YELLOW, RED, RESET = '\033[92m', '\033[96m', '\033[93m', '\033[91m', '\033[0m'
 
 
 async def fetch_twelvedata_async(
