@@ -1,0 +1,31 @@
+# docker-compose.yaml
+version: '3.8'
+
+services:
+  quant-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xau_quant_engine_core
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      # Absolute mount to persist vectorized memory database and logs across image redeployments
+      - quant_market_data:/app/data
+    environment:
+      - TWELVEDATA_API_KEY=${TWELVEDATA_API_KEY}
+      - OLLAMA_API_KEYS=${OLLAMA_API_KEYS}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-minimax-m2.5:cloud}
+      - DATABASE_PATH=/app/data/xau_rag_db
+      - LIVE_LEDGER_PATH=/app/data/live_omni_ledger.csv
+      - BACKTEST_LEDGER_PATH=/app/data/omni_ledger.csv
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  quant_market_data:
+    name: quant_market_data_persistence
