@@ -18,9 +18,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("quant.main")
 
 class Color:
-    GREEN, CYAN, YELLOW, RED, MAGENTA, RESET = '\033[92m', '\033[96m', '\033[93m', '\033[91m', '\033[95m', '\033[0m'
+    GREEN, CYAN, YELLOW, RED, MAGENTA, RESET = '\033[92m', '\033[96m', '\033[93m', '\033[0m'
 
-# Initialize Ledger Engine
 tracker = TradeTracker(ledger_path=settings.LIVE_LEDGER_PATH)
 
 async def run_live_forward_testing_loop():
@@ -28,7 +27,6 @@ async def run_live_forward_testing_loop():
     logger.info(f"{Color.CYAN}🟢 INITIALIZING ASYNC XAUUSD LIVE ENGINE...{Color.RESET}")
     
     async with httpx.AsyncClient() as client:
-        # Pull initial context matrix
         matrix = await build_macro_matrix_async(client, daysback=7)
         if matrix.empty:
             logger.error("Failed to load background context matrix. Halting loop.")
@@ -41,7 +39,6 @@ async def run_live_forward_testing_loop():
         trades_df = generate_mock_trade_history(num_trades=2000)
         knowledge_graph = build_knowledge_graph(trades_df)
         
-        # Cache initial historical payload asynchronously
         for idx, row in df.iterrows():
             await state_manager.append_candle({
                 'time': int(idx.timestamp()),
@@ -71,12 +68,10 @@ async def run_live_forward_testing_loop():
                     await state_manager.append_candle(candle_data)
                     await state_manager.broadcast('new_candle', candle_data)
                     
-                    # Manage active tracking entries via tracker boundaries
                     closed_trade = tracker.update(candle_data)
                     if closed_trade:
                         await state_manager.broadcast('trade_closed', closed_trade)
                     
-                    # Pass the asset state through our deterministic evaluation matrix
                     if tracker.active_trade is None and QuantitativeGuard.verify_execution_threshold(latest_candle):
                         logger.info(f"{Color.YELLOW}⚡ STRAT THRESHOLD HIT! RUNNING LLM RISK ANALYSIS...{Color.RESET}")
                         
@@ -85,8 +80,8 @@ async def run_live_forward_testing_loop():
                         current_strat = "Trend_Following" if latest_candle.get('gold_1h_trend', 0.0) > 0 else "Breakout"
                         day_of_week = current_time.strftime('%A')
                         
-                        # Helper text building tasks
-                        from xau_visual_server import get_rag_context_string, get_graph_context_string
+                        # Leverage context string builders from our refined memory packages
+                        from src.api.state import get_rag_context_string, get_graph_context_string
                         rag_context = get_rag_context_string(rag_collection, current_tape)
                         graph_context = get_graph_context_string(knowledge_graph, current_session, current_strat)
                         
@@ -126,10 +121,8 @@ async def run_live_forward_testing_loop():
 
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
-    # Startup: Schedule non-blocking pipeline tasks cleanly inside the active event loop
     loop_task = asyncio.create_task(run_live_forward_testing_loop())
     yield
-    # Shutdown: Clean up background tracking instances
     loop_task.cancel()
 
 app = FastAPI(title="XAUUSD Omni-Agent Quant Core", lifespan=app_lifespan)
@@ -139,13 +132,11 @@ async def websocket_endpoint(websocket: WebSocket):
     await state_manager.register(websocket)
     try:
         while True:
-            # Maintain active connection state channel
             await websocket.receive_text()
     except WebSocketDisconnect:
         await state_manager.unregister(websocket)
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard():
-    # Target index path matching existing dashboard UI code assets
     with open("templates/dashboard.html", "r") as f:
         return HTMLResponse(content=f.read(), status_code=200)
