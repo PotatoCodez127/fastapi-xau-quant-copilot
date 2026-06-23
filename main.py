@@ -15,12 +15,12 @@ from src.memory.rag import setup_chroma_db, generate_semantic_tape, populate_mem
 from src.memory.graph import build_knowledge_graph, generate_mock_trade_history
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("quant.engine")
+logger = logging.getLogger("quant.main")
 
 class Color:
     GREEN, CYAN, YELLOW, RED, MAGENTA, RESET = '\033[92m', '\033[96m', '\033[93m', '\033[91m', '\033[95m', '\033[0m'
 
-# Initialize historical tracking layers
+# Initialize Ledger Engine
 tracker = TradeTracker(ledger_path=settings.LIVE_LEDGER_PATH)
 
 async def run_live_forward_testing_loop():
