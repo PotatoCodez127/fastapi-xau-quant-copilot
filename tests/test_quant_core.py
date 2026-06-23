@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 import httpx
 from unittest.mock import AsyncMock, MagicMock
 
-from xau_state_manager import QuantitativeGuard
-from xau_massive_engine import engineer_xau_features, fetch_twelvedata_async
+from src.api.state import QuantitativeGuard
+from src.core.engine import engineer_xau_features, fetch_twelvedata_async
 
 @pytest.fixture
 def sample_market_data() -> pd.DataFrame:

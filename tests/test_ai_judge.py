@@ -2,7 +2,7 @@
 import pytest
 import httpx
 from unittest.mock import AsyncMock, MagicMock
-from xau_ai_judge import evaluate_trade_setup_async
+from src.api.judge import evaluate_trade_setup_async
 
 @pytest.mark.asyncio
 async def test_evaluate_trade_setup_async_success(monkeypatch):

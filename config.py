@@ -2,7 +2,6 @@
 from pydantic_settings import BaseSettings
 from pydantic import Field
 from typing import List, Optional
-import os
 
 class Settings(BaseSettings):
     TWELVEDATA_API_KEY: str = Field(..., env="TWELVEDATA_API_KEY")
