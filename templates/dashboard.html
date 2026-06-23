@@ -2,286 +2,152 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>XAUUSD AI Copilot</title>
-    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XAUUSD Omni-Agent Quant Core Console</title>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <style>
-        body { margin: 0; padding: 0; background-color: #131722; color: #d1d4dc; font-family: -apple-system, sans-serif; overflow: hidden; }
-        
-        /* On-Screen Debugger */
-        #debug-bar { width: 100%; height: 30px; background: #000; color: #0f0; font-family: monospace; padding: 5px 10px; box-sizing: border-box; font-size: 12px; border-bottom: 1px solid #333; z-index: 9999; display: flex; align-items: center; }
-        
-        /* Updated Layout */
-        #main-wrapper { display: flex; flex-direction: column; width: 100vw; height: calc(100vh - 30px); }
-        #top-half { display: flex; height: 70%; width: 100%; border-bottom: 2px solid #2a2e39; }
-        #chart-container { width: 75%; height: 100%; position: relative; border-right: 1px solid #2a2e39; }
-        #telemetry-panel { width: 25%; height: 100%; padding: 20px; overflow-y: auto; background-color: #181c27; box-sizing: border-box; }
-        
-        /* Ledger Table Styles */
-        #ledger-panel { height: 30%; width: 100%; background: #131722; overflow-y: auto; }
-        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; color: #d1d4dc; }
-        th { background: #1e222d; padding: 10px; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #2a2e39; }
-        td { padding: 8px 10px; border-bottom: 1px solid #2a2e39; }
-        .win-text { color: #26a69a; font-weight: bold; }
-        .loss-text { color: #ef5350; font-weight: bold; }
-        .log-entry { background: #2a2e39; padding: 15px; margin-bottom: 15px; border-radius: 6px; font-size: 14px; }
-        .execute { border-left: 4px solid #26a69a; }
-        .pass { border-left: 4px solid #ef5350; }
-        h2 { margin-top: 0; font-size: 18px; color: #fff; border-bottom: 1px solid #2a2e39; padding-bottom: 10px; }
-        .stat { color: #8a93a6; font-size: 12px; margin-top: 5px; }
-        
-        /* Signal Modal Styles */
-        #signal-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; background: #1e222d; border: 2px solid #2a2e39; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); z-index: 10000; overflow: hidden; font-family: -apple-system, sans-serif; }
-        .signal-header { padding: 15px; font-weight: bold; font-size: 18px; text-align: center; color: #fff; }
-        .signal-header.long { background: #26a69a; }
-        .signal-header.short { background: #ef5350; }
-        .signal-body { padding: 20px; color: #d1d4dc; }
-        .signal-row { display: flex; justify-content: space-between; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #2a2e39; font-size: 16px; }
-        .signal-value { font-weight: bold; color: #fff; }
-        .signal-reasoning { margin-top: 15px; font-size: 13px; color: #8a93a6; font-style: italic; line-height: 1.4; }
-        .dismiss-btn { width: 100%; padding: 12px; background: #2a2e39; color: #fff; border: none; font-size: 14px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
-        .dismiss-btn:hover { background: #363a45; }
+        :root {
+            --bg-primary: #0a0f1d; --bg-secondary: #141b2d;
+            --text-main: #e2e8f0; --accent-gold: #d4af37;
+            --signal-green: #10b981; --signal-red: #ef4444;
+        }
+        body {
+            background-color: var(--bg-primary); color: var(--text-main);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px;
+        }
+        .grid-layout {
+            display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-top: 20px;
+        }
+        .card {
+            background-color: var(--bg-secondary); border: 1px solid #242f47; border-radius: 8px; padding: 20px;
+        }
+        .header-banner {
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid var(--accent-gold); padding-bottom: 10px;
+        }
+        #terminal-telemetry {
+            background-color: #05070f; font-family: 'Courier New', Courier, monospace;
+            height: 300px; overflow-y: auto; padding: 15px; border-radius: 4px; border: 1px solid #1a2336;
+        }
+        .log-entry { margin-bottom: 8px; font-size: 0.9rem; line-height: 1.4; }
+        .badge-long { color: var(--signal-green); font-weight: bold; }
+        .badge-short { color: var(--signal-red); font-weight: bold; }
     </style>
 </head>
 <body>
-    <div id="signal-modal">
-        <div id="signal-header" class="signal-header">ACTION REQUIRED</div>
-        <div class="signal-body">
-            <div class="signal-row"><span>Asset:</span> <span class="signal-value" id="sig-asset">--</span></div>
-            <div class="signal-row"><span>Entry Price:</span> <span class="signal-value" id="sig-entry">--</span></div>
-            <div class="signal-row"><span>Stop Loss:</span> <span class="signal-value" id="sig-sl" style="color: #ef5350;">--</span></div>
-            <div class="signal-row"><span>Take Profit:</span> <span class="signal-value" id="sig-tp" style="color: #26a69a;">--</span></div>
-            <div class="signal-row" style="border: none;"><span>Risk Allocation:</span> <span class="signal-value" id="sig-risk">--</span></div>
-            <div class="signal-reasoning" id="sig-reasoning">--</div>
-        </div>
-        <button class="dismiss-btn" onclick="document.getElementById('signal-modal').style.display='none'">DISMISS ALERT</button>
+
+    <div class="header-banner">
+        <h2>XAUUSD OMNI-AGENT : QUANTITATIVE TERMINAL</h2>
+        <div id="connection-status" style="color: var(--signal-red);">🔴 SYSTEM DISCONNECTED</div>
     </div>
 
-    <div id="tearsheet-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 20000; justify-content: center; align-items: center; font-family: -apple-system, sans-serif;">
-        <div style="background: #1e222d; border: 2px solid #2a2e39; border-radius: 8px; width: 500px; padding: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.9); text-align: center;">
-            <h1 style="color: #fff; margin-top: 0; border-bottom: 2px solid #2a2e39; padding-bottom: 15px;">📊 BACKTEST COMPLETE</h1>
-            
-            <div style="display: flex; justify-content: space-between; margin-top: 20px; text-align: left;">
-                <div>
-                    <div style="color: #8a93a6; font-size: 14px;">Net Profitability</div>
-                    <div id="ts-net-pips" style="font-size: 32px; font-weight: bold; margin-top: 5px;">-- Pips</div>
-                </div>
-                <div>
-                    <div style="color: #8a93a6; font-size: 14px;">Win Rate</div>
-                    <div id="ts-win-rate" style="font-size: 32px; font-weight: bold; margin-top: 5px; color: #d1d4dc;">--%</div>
-                </div>
-            </div>
-            
-            <div style="background: #131722; border-radius: 6px; padding: 15px; margin-top: 25px; display: flex; justify-content: space-around; color: #d1d4dc;">
-                <div><strong>Total Trades:</strong> <span id="ts-total">--</span></div>
-                <div style="color: #26a69a;"><strong>Winners:</strong> <span id="ts-wins">--</span></div>
-                <div style="color: #ef5350;"><strong>Losers:</strong> <span id="ts-losses">--</span></div>
-            </div>
-            
-            <button onclick="document.getElementById('tearsheet-modal').style.display='none'" style="margin-top: 25px; width: 100%; padding: 15px; background: #2962ff; color: #fff; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer;">REVIEW CHARTS</button>
+    <div class="grid-layout">
+        <div class="card">
+            <h3>Real-Time Spot Gold Telemetry Streams</h3>
+            <div id="chart-viewport"></div>
+            <h3 style="margin-top: 25px;">Engine Analytics Log</h3>
+            <div id="terminal-telemetry"></div>
         </div>
-    </div>
 
-    <div id="debug-bar">Initializing System...</div>
-    
-    <div id="main-wrapper">
-        <div id="top-half">
-            <div id="chart-container"></div>
-            <div id="telemetry-panel">
-                <h2>🧠 AI Judge Telemetry</h2>
-                <div id="logs"></div>
+        <div class="card">
+            <h3>Active Account Ledger Positions</h3>
+            <div id="active-positions-container">
+                <p style="color: #64748b;">No active quantitative entries processed by engine.</p>
             </div>
-        </div>
-        
-        <div id="ledger-panel">
-            <table id="ledger-table">
-                <thead>
-                    <tr>
-                        <th>Entry Time</th>
-                        <th>Exit Time</th>
-                        <th>Direction</th>
-                        <th>Entry Price</th>
-                        <th>Exit Price</th>
-                        <th>PnL (Pts)</th>
-                        <th>Result</th>
-                        <th>AI Reasoning (Audit)</th>
-                    </tr>
-                </thead>
-                <tbody id="ledger-body">
-                </tbody>
-            </table>
+            
+            <h3 style="margin-top: 30px;">Strategic Execution Parameters</h3>
+            <div style="font-size: 0.95rem; line-height: 1.8;">
+                <div>Asset Target: <span style="color: var(--accent-gold);">XAUUSD Spot Gold</span></div>
+                <div>Evaluation Model: <span id="meta-model">Connecting...</span></div>
+                <div>Core Pipeline: <span style="color: var(--signal-green);">ASGI Loop Async</span></div>
+            </div>
         </div>
     </div>
 
     <script>
-        const debugLog = (msg, color = "#0f0") => {
-            const bar = document.getElementById('debug-bar');
-            bar.innerText = `[System Log]: ${msg}`;
-            bar.style.color = color;
-            console.log(msg);
+        const telemetryTerminal = document.getElementById('terminal-telemetry');
+        const statusIndicator = document.getElementById('connection-status');
+        
+        // Initialize real-time chart canvas options
+        const chartOptions = {
+            chart: { type: 'candlestick', height: 350, id: 'xau_live_stream' },
+            series: [{ data: [] }],
+            xaxis: { type: 'datetime' },
+            theme: { mode: 'dark' }
+        };
+        const chart = new ApexCharts(document.querySelector("#chart-viewport"), chartOptions);
+        chart.render();
+
+        function appendLog(message, contextClass = '') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${contextClass}`;
+            entry.innerText = `[${new Date().toLocaleTimeString()}] ${message}`;
+            telemetryTerminal.appendChild(entry);
+            telemetryTerminal.scrollTop = telemetryTerminal.scrollHeight;
+        }
+
+        // Establish connection using native web socket endpoints
+        const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws';
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            statusIndicator.innerText = "🟢 CORE TELEMETRY LINK ACTIVE";
+            statusIndicator.style.color = "var(--signal-green)";
+            appendLog("System handshake established. Stream active.");
         };
 
-        let chart, candleSeries;
+        socket.onmessage = (event) => {
+            const packet = JSON.parse(event.data);
+            const payload = packet.data;
 
-        window.addEventListener('DOMContentLoaded', () => {
-            try {
-                debugLog("DOM Loaded. Creating Chart...");
-                const chartContainer = document.getElementById('chart-container');
-                
-                chart = LightweightCharts.createChart(chartContainer, {
-                    autoSize: true, 
-                    layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d4dc' },
-                    grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
-                    timeScale: { timeVisible: true, secondsVisible: false }
-                });
+            switch(packet.event) {
+                case 'init_history':
+                    const historicalCandles = payload.map(c => ({
+                        x: new Date(c.time * 1000),
+                        y: [c.open, c.high, c.low, c.close]
+                    }));
+                    ApexCharts.exec('xau_live_stream', 'updateSeries', [{ data: historicalCandles }]);
+                    appendLog(`Loaded ${historicalCandles.length} historical context candles.`);
+                    break;
 
-                candleSeries = chart.addCandlestickSeries({
-                    upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
-                });
-                
-                debugLog("Chart Created Successfully. Connecting Sockets...");
-            } catch (err) {
-                debugLog(`CHART CRASH: ${err.message}`, "#f00");
-                return;
+                case 'new_candle':
+                    ApexCharts.exec('xau_live_stream', 'appendData', [{
+                        data: [{
+                            x: new Date(payload.time * 1000),
+                            y: [payload.open, payload.high, payload.low, payload.close]
+                        }]
+                    }]);
+                    appendLog(`Candle Close Update: $${payload.close.toFixed(2)}`);
+                    break;
+
+                case 'trade_signal':
+                    const directionBadge = payload.direction === 'LONG' ? 'badge-long' : 'badge-short';
+                    appendLog(`🚨 SIGNAL TRIGGERED [${payload.direction}] Entry: ${payload.entry} | SL: ${payload.sl} | TP: ${payload.tp}`, directionBadge);
+                    
+                    document.getElementById('active-positions-container').innerHTML = `
+                        <div style="border-left: 4px solid var(--accent-gold); padding-left: 10px;">
+                            <div class="${directionBadge}">POSITION ACTIVE: ${payload.direction}</div>
+                            <div style="font-size: 0.9rem; margin-top: 5px;">Entry Target: $${payload.entry.toFixed(2)}</div>
+                            <div style="font-size: 0.9rem; color: var(--signal-red);">Stop Loss: $${payload.sl.toFixed(2)}</div>
+                            <div style="font-size: 0.9rem; color: var(--signal-green);">Take Profit: $${payload.tp.toFixed(2)}</div>
+                            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">${payload.reasoning}</div>
+                        </div>`;
+                    break;
+
+                case 'trade_closed':
+                    const outcomeClass = payload.result === 'WIN' ? 'badge-long' : 'badge-short';
+                    appendLog(`💰 POSITION CLOSED: [${payload.result}] | Net PnL: ${payload.pnl} Pips`, outcomeClass);
+                    document.getElementById('active-positions-container').innerHTML = `
+                        <p style="color: #64748b;">No active quantitative entries processed by engine.</p>`;
+                    break;
             }
+        };
 
-            // WebSockets
-            const socket = io();
-
-            socket.on('connect', () => {
-                debugLog("Connected to Backend. Waiting for data...");
-            });
-
-            socket.on('disconnect', () => {
-                debugLog("Disconnected from Backend!", "#f00");
-            });
-
-            socket.on('init_history', (data) => {
-                try {
-                    debugLog(`Received ${data.length} historical candles.`);
-                    candleSeries.setData(data);
-                    chart.timeScale().fitContent();
-                } catch (err) {
-                    debugLog(`DATA CRASH (History): ${err.message}`, "#f00");
-                }
-            });
-
-            socket.on('new_candle', (data) => {
-                try {
-                    debugLog(`TICK: Received new candle at ${data.time}`);
-                    candleSeries.update(data);
-                } catch (err) {
-                    debugLog(`DATA CRASH (Tick): ${err.message}`, "#f00");
-                }
-            });
-
-            socket.on('ai_decision', (data) => {
-                try {
-                    debugLog(`AI Event Triggered: ${data.decision}`, "#ff0");
-                    
-                    const markers = candleSeries.markers() || [];
-                    markers.push({
-                        time: data.timestamp,
-                        position: data.decision === 'EXECUTE' ? 'belowBar' : 'aboveBar',
-                        color: data.decision === 'EXECUTE' ? '#26a69a' : '#ef5350',
-                        shape: data.decision === 'EXECUTE' ? 'arrowUp' : 'arrowDown',
-                        text: data.decision
-                    });
-                    
-                    markers.sort((a, b) => a.time - b.time);
-                    candleSeries.setMarkers(markers);
-
-                    const logsDiv = document.getElementById('logs');
-                    const logEntry = document.createElement('div');
-                    logEntry.className = `log-entry ${data.decision.toLowerCase()}`;
-                    logEntry.innerHTML = `
-                        <div style="font-weight: bold; color: ${data.decision === 'EXECUTE' ? '#26a69a' : '#ef5350'}">${data.decision}</div>
-                        <div style="margin: 8px 0;">${data.reasoning}</div>
-                        <div class="stat">Confidence: ${data.confidence}% | Distance: ${data.rag_distance}</div>
-                    `;
-                    logsDiv.prepend(logEntry);
-                } catch (err) {
-                    debugLog(`MARKER CRASH: ${err.message}`, "#f00");
-                }
-            });
-
-            // Listen for Closed Trades and update the Ledger Table
-            socket.on('trade_closed', (data) => {
-                try {
-                    debugLog(`Trade Closed: ${data.result} (${data.pnl} pts)`);
-                    
-                    const tbody = document.getElementById('ledger-body');
-                    const row = document.createElement('tr');
-                    
-                    const resultClass = data.result === 'WIN' ? 'win-text' : 'loss-text';
-                    const pnlPrefix = data.pnl > 0 ? '+' : '';
-                    
-                    row.innerHTML = `
-                        <td>${data.entry_time}</td>
-                        <td>${data.exit_time}</td>
-                        <td class="${data.direction === 'LONG' ? 'win-text' : 'loss-text'}">${data.direction}</td>
-                        <td>${data.entry.toFixed(2)}</td>
-                        <td>${data.exit.toFixed(2)}</td>
-                        <td class="${resultClass}">${pnlPrefix}${data.pnl.toFixed(2)}</td>
-                        <td class="${resultClass}">${data.result}</td>
-                        <td style="color: #8a93a6; font-style: italic;">${data.reasoning}</td>
-                    `;
-                    
-                    // Add new trades to the top of the list
-                    tbody.prepend(row);
-                    
-                } catch (err) {
-                    debugLog(`LEDGER CRASH: ${err.message}`, "#f00");
-                }
-            });
-
-            // Listen for Live Trade Signals
-            socket.on('trade_signal', (data) => {
-                try {
-                    debugLog(`🚨 ACTIVE SIGNAL RECEIVED: ${data.direction}`, "#ff0");
-                    
-                    // Populate Modal Data
-                    const header = document.getElementById('signal-header');
-                    header.innerText = `${data.direction} ${data.asset}`;
-                    header.className = `signal-header ${data.direction.toLowerCase()}`;
-                    
-                    document.getElementById('sig-asset').innerText = data.asset;
-                    document.getElementById('sig-entry').innerText = data.entry.toFixed(2);
-                    document.getElementById('sig-sl').innerText = data.sl.toFixed(2);
-                    document.getElementById('sig-tp').innerText = data.tp.toFixed(2);
-                    document.getElementById('sig-risk').innerText = `${data.risk}% Portfolio`;
-                    document.getElementById('sig-reasoning').innerText = `Logic: ${data.reasoning}`;
-                    
-                    // Show Modal
-                    document.getElementById('signal-modal').style.display = 'block';
-                    
-                } catch (err) {
-                    debugLog(`SIGNAL UI CRASH: ${err.message}`, "#f00");
-                }
-            });
-
-            // Listen for End of Run
-            socket.on('backtest_complete', (data) => {
-                try {
-                    debugLog(`🏁 BACKTEST COMPLETE. Net Pips: ${data.net_pips}`, "#0f0");
-                    
-                    const pipsEl = document.getElementById('ts-net-pips');
-                    pipsEl.innerText = `${data.net_pips > 0 ? '+' : ''}${data.net_pips.toFixed(1)} Pips`;
-                    pipsEl.style.color = data.net_pips > 0 ? '#26a69a' : (data.net_pips < 0 ? '#ef5350' : '#d1d4dc');
-                    
-                    document.getElementById('ts-win-rate').innerText = `${data.win_rate.toFixed(1)}%`;
-                    document.getElementById('ts-total').innerText = data.total_trades;
-                    document.getElementById('ts-wins').innerText = data.winners;
-                    document.getElementById('ts-losses').innerText = data.losers;
-                    
-                    // Dim the screen and show the final scorecard
-                    document.getElementById('tearsheet-modal').style.display = 'flex';
-                    
-                } catch (err) {
-                    debugLog(`TEARSHEET CRASH: ${err.message}`, "#f00");
-                }
-            });
-        });
+        socket.onclose = () => {
+            statusIndicator.innerText = "🔴 SYSTEM DISCONNECTED";
+            statusIndicator.style.color = "var(--signal-red)";
+            appendLog("Connection dropped. Awaiting reconnect loop...", 'badge-short');
+        };
     </script>
 </body>
 </html>
