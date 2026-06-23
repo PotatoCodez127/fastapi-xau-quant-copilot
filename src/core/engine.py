@@ -2,7 +2,6 @@
 import asyncio
 import httpx
 import pandas as pd
-from datetime import datetime
 import yfinance as yf
 from typing import Optional
 from config import settings
