@@ -2,13 +2,11 @@
 import os
 import pandas as pd
 import chromadb
+from typing import Any
 from config import settings
 
-class Color:
-    GREEN, CYAN, YELLOW, RESET = '\033[92m', '\033[96m', '\033[93m', '\033[0m'
-
 def generate_semantic_tape(row: pd.Series) -> str:
-    """Translates raw quantitative attributes into readable text for context matching."""
+    """Translates raw quantitative features into a text narrative for the LLM."""
     time_str = row.name.strftime('%H:%M UTC')
     session = row['session'].replace('_', ' ')
     trend = f"Bullish (+{row['gold_1h_trend']:.2f} pts)" if row['gold_1h_trend'] > 0 else f"Bearish ({row['gold_1h_trend']:.2f} pts)"
