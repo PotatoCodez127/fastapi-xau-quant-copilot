@@ -1,10 +1,11 @@
 # xau_state_manager.py
 import asyncio
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from fastapi import WebSocket
 
 logger = logging.getLogger("quant.state")
+
 
 class QuantEngineState:
     def __init__(self):
@@ -18,10 +19,9 @@ class QuantEngineState:
             self.active_connections.append(websocket)
             # Instantly catch up newly connected browser
             if self.market_history_cache:
-                await websocket.send_json({
-                    "event": "init_history",
-                    "data": self.market_history_cache
-                })
+                await websocket.send_json(
+                    {"event": "init_history", "data": self.market_history_cache}
+                )
 
     async def unregister(self, websocket: WebSocket):
         async with self._lock:
@@ -39,13 +39,10 @@ class QuantEngineState:
         async with self._lock:
             if not self.active_connections:
                 return
-            
+
             payload = {"event": event, "data": data}
             # Broadcast concurrently across active connections
-            tasks = [
-                self._safe_send(ws, payload) 
-                for ws in self.active_connections
-            ]
+            tasks = [self._safe_send(ws, payload) for ws in self.active_connections]
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _safe_send(self, ws: WebSocket, payload: Dict[str, Any]):
@@ -55,17 +52,19 @@ class QuantEngineState:
             # Stale connection will be cleaned up by the lifecycle router
             pass
 
+
 class QuantitativeGuard:
     @staticmethod
     def verify_execution_threshold(latest_candle: Any) -> bool:
         """Enforces a rigorous quantitative filter before allocating LLM execution tokens."""
-        trend_strength = abs(latest_candle.get('gold_1h_trend', 0.0))
-        volatility = latest_candle.get('rolling_volatility', 0.0)
-        
+        trend_strength = abs(latest_candle.get("gold_1h_trend", 0.0))
+        volatility = latest_candle.get("rolling_volatility", 0.0)
+
         # Guard Clause: Veto setups lacking macro expansion parameters
         if trend_strength < 4.5 or volatility <= 0.0:
             return False
-            
+
         return True
+
 
 state_manager = QuantEngineState()

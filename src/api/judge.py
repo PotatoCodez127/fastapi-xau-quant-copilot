@@ -4,19 +4,34 @@ import httpx
 from typing import Optional, Dict, Any
 from config import settings
 
-class Color:
-    GREEN, CYAN, YELLOW, RED, MAGENTA, RESET = '\033[92m', '\033[96m', '\033[93m', '\033[91m', '\033[95m', '\033[0m'
 
-async def evaluate_trade_setup_async(client: httpx.AsyncClient, market_state: str, rag_context: str, graph_context: str) -> Optional[Dict[str, Any]]:
+class Color:
+    GREEN, CYAN, YELLOW, RED, MAGENTA, RESET = (
+        "\033[92m",
+        "\033[96m",
+        "\033[93m",
+        "\033[91m",
+        "\033[95m",
+        "\033[0m",
+    )
+
+
+async def evaluate_trade_setup_async(
+    client: httpx.AsyncClient, market_state: str, rag_context: str, graph_context: str
+) -> Optional[Dict[str, Any]]:
     """Feeds multi-dimensional quant context to the LLM asynchronously with forced JSON schema constraints."""
     api_keys = settings.OLLAMA_API_KEYS
     model = settings.OLLAMA_MODEL
-    
+
     if not api_keys:
-        print(f"{Color.RED}❌ No API Keys resolved from valid settings matrix.{Color.RESET}")
+        print(
+            f"{Color.RED}❌ No API Keys resolved from valid settings matrix.{Color.RESET}"
+        )
         return None
 
-    print(f"{Color.CYAN}⚖️ Submitting Setup to Async AI Judge ({model})...{Color.RESET}")
+    print(
+        f"{Color.CYAN}⚖️ Submitting Setup to Async AI Judge ({model})...{Color.RESET}"
+    )
 
     system_prompt = """You are an elite quantitative AI judge for XAUUSD (Gold). 
     Your job is to analyze the current market state, historical vector precedents (RAG), and the topological parameter graph to rate a potential trade setup.
@@ -59,32 +74,34 @@ TOPOLOGICAL SAFETY (Limb 3 - Graph DB)
 """
 
     payload = {
-        "model": model, 
+        "model": model,
         "prompt": f"{system_prompt}\n{user_prompt}",
         "stream": False,
-        "temperature": 0.2, 
-        "format": "json"    
+        "temperature": 0.2,
+        "format": "json",
     }
 
     try:
         api_url = "https://ollama.com/api/generate"
         response = await client.post(
-            api_url, 
+            api_url,
             headers={"Authorization": f"Bearer {api_keys[0]}"},
             json=payload,
-            timeout=120.0
+            timeout=120.0,
         )
-        
+
         if response.status_code != 200:
-            print(f"{Color.RED}❌ Async API Error {response.status_code}: {response.text}{Color.RESET}")
+            print(
+                f"{Color.RED}❌ Async API Error {response.status_code}: {response.text}{Color.RESET}"
+            )
             return None
-            
-        raw_output = response.json().get('response', '').strip()
+
+        raw_output = response.json().get("response", "").strip()
         if raw_output.startswith("```json"):
             raw_output = raw_output[7:-3].strip()
         elif raw_output.startswith("```"):
             raw_output = raw_output[3:-3].strip()
-            
+
         return json.loads(raw_output)
     except Exception as e:
         print(f"{Color.RED}❌ Evaluator Async Exception: {e}{Color.RESET}")
